@@ -115,27 +115,37 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Update ECS Service
+      - name: Trigger CodeDeploy Blue-Green Deployment
+        id: deploy
         run: |
-          # Get the ECS cluster and service names
-          CLUSTER_NAME="${{ github.ref == 'refs/heads/main' && 'myapp-prod' || github.ref == 'refs/heads/staging' && 'myapp-staging' || 'myapp-dev' }}"
-          SERVICE_NAME="${{ github.ref == 'refs/heads/main' && 'myapp-prod' || github.ref == 'refs/heads/staging' && 'myapp-staging' || 'myapp-dev' }}"
+          # Get environment-specific names
+          APP_NAME="${{ github.ref == 'refs/heads/main' && 'myapp-prod' || github.ref == 'refs/heads/staging' && 'myapp-staging' || 'myapp-dev' }}"
+          DEPLOYMENT_GROUP="${{ github.ref == 'refs/heads/main' && 'myapp-prod-deployment-group' || github.ref == 'refs/heads/staging' && 'myapp-staging-deployment-group' || 'myapp-dev-deployment-group' }}"
 
-          # Force new deployment
-          aws ecs update-service \
-            --cluster $CLUSTER_NAME \
-            --service $SERVICE_NAME \
-            --force-new-deployment
+          echo "🚀 Starting Blue-Green Deployment..."
+          echo "Application: $APP_NAME"
+          echo "Deployment Group: $DEPLOYMENT_GROUP"
 
-      - name: Wait for deployment to complete
+          # Create deployment
+          DEPLOYMENT_ID=$(aws deploy create-deployment \
+            --application-name $APP_NAME \
+            --deployment-group-name $DEPLOYMENT_GROUP \
+            --deployment-config-name CodeDeployDefault.ECSAllAtOnce \
+            --description "GitHub Actions deployment - ${{ github.sha }}" \
+            --query 'deploymentId' \
+            --output text)
+
+          echo "Deployment ID: $DEPLOYMENT_ID"
+          echo "deployment_id=$DEPLOYMENT_ID" >> $GITHUB_OUTPUT
+
+      - name: Wait for CodeDeploy to Complete
         run: |
-          CLUSTER_NAME="${{ github.ref == 'refs/heads/main' && 'myapp-prod' || github.ref == 'refs/heads/staging' && 'myapp-staging' || 'myapp-dev' }}"
-          SERVICE_NAME="${{ github.ref == 'refs/heads/main' && 'myapp-prod' || github.ref == 'refs/heads/staging' && 'myapp-staging' || 'myapp-dev' }}"
+          DEPLOYMENT_ID="${{ steps.deploy.outputs.deployment_id }}"
 
-          echo "Waiting for deployment to complete..."
-          aws ecs wait services-stable \
-            --cluster $CLUSTER_NAME \
-            --services $SERVICE_NAME
+          echo "⏳ Waiting for blue-green deployment to complete..."
+          aws deploy wait deployment-successful --deployment-id $DEPLOYMENT_ID
+
+          echo "✅ Blue-green deployment completed successfully!"
 
       - name: Get Load Balancer URL
         id: get-alb-url
