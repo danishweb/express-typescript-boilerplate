@@ -52,6 +52,10 @@ resource "aws_s3_bucket_lifecycle_configuration" "artifacts" {
     id     = "delete_old_artifacts"
     status = "Enabled"
 
+    filter {
+      prefix = ""
+    }
+
     expiration {
       days = var.backup_retention_days
     }

@@ -1,5 +1,5 @@
 # CodeDeploy Application
-resource "aws_codedeploy_application" "app" {
+resource "aws_codedeploy_app" "app" {
   compute_platform = "ECS"
   name             = "${var.project_name}-${var.environment}"
 
@@ -11,7 +11,7 @@ resource "aws_codedeploy_application" "app" {
 
 # CodeDeploy Deployment Group
 resource "aws_codedeploy_deployment_group" "app" {
-  app_name              = aws_codedeploy_application.app.name
+  app_name              = aws_codedeploy_app.app.name
   deployment_group_name = "${var.project_name}-${var.environment}-deployment-group"
   service_role_arn      = aws_iam_role.codedeploy_service.arn
 
@@ -46,8 +46,9 @@ resource "aws_codedeploy_deployment_group" "app" {
   }
 }
 
-# CodePipeline
+# CodePipeline (Development only)
 resource "aws_codepipeline" "app" {
+  count    = var.environment == "dev" ? 1 : 0
   name     = "${var.project_name}-${var.environment}-pipeline"
   role_arn = aws_iam_role.codepipeline_service.arn
 
@@ -86,7 +87,7 @@ resource "aws_codepipeline" "app" {
       input_artifacts = ["source_output"]
 
       configuration = {
-        ApplicationName                = aws_codedeploy_application.app.name
+        ApplicationName                = aws_codedeploy_app.app.name
         DeploymentGroupName            = aws_codedeploy_deployment_group.app.deployment_group_name
         TaskDefinitionTemplateArtifact = "source_output"
         AppSpecTemplateArtifact        = "source_output"
@@ -126,10 +127,10 @@ resource "aws_appautoscaling_target" "ecs_target" {
   }
 }
 
-# Auto Scaling Policy - Scale Up
-resource "aws_appautoscaling_policy" "ecs_policy_up" {
+# Auto Scaling Policy - CPU
+resource "aws_appautoscaling_policy" "ecs_cpu_policy" {
   count              = var.enable_autoscaling ? 1 : 0
-  name               = "${var.project_name}-${var.environment}-scale-up"
+  name               = "${var.project_name}-${var.environment}-cpu-scaling"
   policy_type        = "TargetTrackingScaling"
   resource_id        = aws_appautoscaling_target.ecs_target[0].resource_id
   scalable_dimension = aws_appautoscaling_target.ecs_target[0].scalable_dimension
@@ -140,22 +141,5 @@ resource "aws_appautoscaling_policy" "ecs_policy_up" {
       predefined_metric_type = "ECSServiceAverageCPUUtilization"
     }
     target_value = 70.0
-  }
-}
-
-# Auto Scaling Policy - Scale Down
-resource "aws_appautoscaling_policy" "ecs_policy_down" {
-  count              = var.enable_autoscaling ? 1 : 0
-  name               = "${var.project_name}-${var.environment}-scale-down"
-  policy_type        = "TargetTrackingScaling"
-  resource_id        = aws_appautoscaling_target.ecs_target[0].resource_id
-  scalable_dimension = aws_appautoscaling_target.ecs_target[0].scalable_dimension
-  service_namespace  = aws_appautoscaling_target.ecs_target[0].service_namespace
-
-  target_tracking_scaling_policy_config {
-    predefined_metric_specification {
-      predefined_metric_type = "ECSServiceAverageMemoryUtilization"
-    }
-    target_value = 80.0
   }
 }
