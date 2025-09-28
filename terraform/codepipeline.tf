@@ -30,7 +30,7 @@ resource "aws_codedeploy_deployment_group" "app" {
     }
 
     terminate_blue_instances_on_deployment_success {
-      action = "TERMINATE"
+      action                           = "TERMINATE"
       termination_wait_time_in_minutes = 5
     }
   }
@@ -86,10 +86,10 @@ resource "aws_codepipeline" "app" {
       input_artifacts = ["source_output"]
 
       configuration = {
-        ApplicationName     = aws_codedeploy_application.app.name
-        DeploymentGroupName = aws_codedeploy_deployment_group.app.deployment_group_name
+        ApplicationName                = aws_codedeploy_application.app.name
+        DeploymentGroupName            = aws_codedeploy_deployment_group.app.deployment_group_name
         TaskDefinitionTemplateArtifact = "source_output"
-        AppSpecTemplateArtifact = "source_output"
+        AppSpecTemplateArtifact        = "source_output"
       }
     }
   }

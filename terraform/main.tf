@@ -21,7 +21,7 @@ module "vpc" {
 # ECR Repository
 resource "aws_ecr_repository" "app" {
   name = "${var.project_name}-${var.environment}"
-  
+
   image_scanning_configuration {
     scan_on_push = true
   }
@@ -35,12 +35,12 @@ resource "aws_ecs_cluster" "main" {
 # Task Definition
 resource "aws_ecs_task_definition" "app" {
   family                   = "${var.project_name}-${var.environment}"
-  network_mode            = "awsvpc"
+  network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
-  cpu                     = var.ecs_task_cpu != null ? var.ecs_task_cpu : var.cpu
-  memory                  = var.ecs_task_memory != null ? var.ecs_task_memory : var.memory
-  execution_role_arn      = aws_iam_role.ecs_execution.arn
-  task_role_arn           = aws_iam_role.ecs_task.arn
+  cpu                      = var.ecs_task_cpu != null ? var.ecs_task_cpu : var.cpu
+  memory                   = var.ecs_task_memory != null ? var.ecs_task_memory : var.memory
+  execution_role_arn       = aws_iam_role.ecs_execution.arn
+  task_role_arn            = aws_iam_role.ecs_task.arn
 
   container_definitions = jsonencode([
     {
@@ -76,7 +76,7 @@ resource "aws_lb" "app" {
   internal           = false
   load_balancer_type = "application"
   security_groups    = [aws_security_group.alb.id]
-  subnets           = module.vpc.public_subnets
+  subnets            = module.vpc.public_subnets
 
   tags = {
     Environment = var.environment
