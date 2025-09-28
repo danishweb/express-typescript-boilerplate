@@ -46,9 +46,8 @@ resource "aws_codedeploy_deployment_group" "app" {
   }
 }
 
-# CodePipeline (Development only)
+# CodePipeline
 resource "aws_codepipeline" "app" {
-  count    = var.environment == "dev" ? 1 : 0
   name     = "${var.project_name}-${var.environment}-pipeline"
   role_arn = aws_iam_role.codepipeline_service.arn
 
@@ -136,7 +135,7 @@ resource "aws_appautoscaling_policy" "ecs_cpu_policy" {
   scalable_dimension = aws_appautoscaling_target.ecs_target[0].scalable_dimension
   service_namespace  = aws_appautoscaling_target.ecs_target[0].service_namespace
 
-  target_tracking_scaling_policy_config {
+  target_tracking_scaling_policy_configuration {
     predefined_metric_specification {
       predefined_metric_type = "ECSServiceAverageCPUUtilization"
     }
