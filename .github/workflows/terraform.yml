@@ -1,36 +1,36 @@
 name: Terraform Infrastructure
 
-on:
-  push:
-    branches: [main, staging, develop]
-    paths:
-      - "terraform/**"
-      - .github/workflows/terraform.yml
-  pull_request:
-    branches: [main, staging, develop]
-    paths:
-      - "terraform/**"
-      - .github/workflows/terraform.yml
-  workflow_dispatch:
-    inputs:
-      environment:
-        description: Environment to deploy
-        required: true
-        default: dev
-        type: choice
-        options:
-          - dev
-          - staging
-          - prod
-      action:
-        description: Action to perform
-        required: true
-        default: plan
-        type: choice
-        options:
-          - plan
-          - apply
-          - destroy
+# on:
+#   push:
+#     branches: [main, staging, develop]
+#     paths:
+#       - "terraform/**"
+#       - .github/workflows/terraform.yml
+#   pull_request:
+#     branches: [main, staging, develop]
+#     paths:
+#       - "terraform/**"
+#       - .github/workflows/terraform.yml
+#   workflow_dispatch:
+#     inputs:
+#       environment:
+#         description: Environment to deploy
+#         required: true
+#         default: dev
+#         type: choice
+#         options:
+#           - dev
+#           - staging
+#           - prod
+#       action:
+#         description: Action to perform
+#         required: true
+#         default: plan
+#         type: choice
+#         options:
+#           - plan
+#           - apply
+#           - destroy
 
 env:
   TF_VERSION: 1.6.0

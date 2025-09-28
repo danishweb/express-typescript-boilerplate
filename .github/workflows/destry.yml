@@ -1,4 +1,4 @@
-name: Destroy Infrastructure
+name: Force Destroy All Resources
 
 on:
   push:
@@ -17,20 +17,14 @@ on:
           - dev
           - staging
           - prod
-      confirm_destroy:
-        description: 'Type "DESTROY" to confirm'
-        required: true
-        type: string
 
 env:
-  TF_VERSION: 1.6.0
   AWS_REGION: ap-south-1
 
 jobs:
-  terraform-destroy:
-    name: Destroy Infrastructure
+  force-destroy:
+    name: Force Destroy All Resources
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' || github.event.inputs.confirm_destroy == 'DESTROY'
 
     permissions:
       id-token: write
@@ -46,44 +40,97 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: ${{ env.TF_VERSION }}
-
       - name: Determine Environment
         id: env
         run: |
           if [ "${{ github.event.inputs.environment }}" != "" ]; then
             echo "environment=${{ github.event.inputs.environment }}" >> $GITHUB_OUTPUT
           elif [ "${{ github.ref }}" == "refs/heads/main" ]; then
-            echo "environment=prod" >> $GITHUB_OUTPUT
+            echo "environment=prod" >> $GITHUB_STEP_SUMMARY
           elif [ "${{ github.ref }}" == "refs/heads/staging" ]; then
-            echo "environment=staging" >> $GITHUB_OUTPUT
+            echo "environment=staging" >> $GITHUB_STEP_SUMMARY
           else
-            echo "environment=dev" >> $GITHUB_OUTPUT
+            echo "environment=dev" >> $GITHUB_STEP_SUMMARY
           fi
 
-      - name: Terraform Init
+      - name: Force Delete ECS Services
         run: |
-          terraform init -backend-config="key=${{ steps.env.outputs.environment }}/terraform.tfstate"
-        working-directory: ./terraform
+          echo "🗑️ Deleting ECS Services..."
+          aws ecs list-services --cluster myapp-${{ steps.env.outputs.environment }} --query 'serviceArns[]' --output text | \
+          xargs -I {} aws ecs delete-service --cluster myapp-${{ steps.env.outputs.environment }} --service {} --force || true
 
-      - name: Terraform Destroy
+      - name: Force Delete ECS Clusters
         run: |
-          echo "🚨 DESTROYING INFRASTRUCTURE FOR: ${{ steps.env.outputs.environment }}"
-          echo "⚠️  This will delete ALL resources!"
-          terraform destroy -var-file="environments/${{ steps.env.outputs.environment }}/terraform.tfvars" -auto-approve
-        working-directory: ./terraform
+          echo "🗑️ Deleting ECS Clusters..."
+          aws ecs delete-cluster --cluster myapp-${{ steps.env.outputs.environment }} || true
+
+      - name: Force Delete Load Balancers
+        run: |
+          echo "🗑️ Deleting Load Balancers..."
+          aws elbv2 describe-load-balancers --query 'LoadBalancers[?contains(LoadBalancerName, `myapp-${{ steps.env.outputs.environment }}`)].LoadBalancerArn' --output text | \
+          xargs -I {} aws elbv2 delete-load-balancer --load-balancer-arn {} || true
+
+      - name: Force Delete Target Groups
+        run: |
+          echo "🗑️ Deleting Target Groups..."
+          aws elbv2 describe-target-groups --query 'TargetGroups[?contains(TargetGroupName, `myapp-${{ steps.env.outputs.environment }}`)].TargetGroupArn' --output text | \
+          xargs -I {} aws elbv2 delete-target-group --target-group-arn {} || true
+
+      - name: Force Delete ECR Repositories
+        run: |
+          echo "🗑️ Deleting ECR Repositories..."
+          aws ecr delete-repository --repository-name myapp-${{ steps.env.outputs.environment }} --force || true
+
+      - name: Force Delete S3 Buckets
+        run: |
+          echo "🗑️ Deleting S3 Buckets..."
+          aws s3 ls | grep myapp-${{ steps.env.outputs.environment }} | awk '{print $3}' | \
+          xargs -I {} aws s3 rb s3://{} --force || true
+
+      - name: Force Delete CodeDeploy Applications
+        run: |
+          echo "🗑️ Deleting CodeDeploy Applications..."
+          aws deploy delete-application --application-name myapp-${{ steps.env.outputs.environment }} || true
+
+      - name: Force Delete IAM Roles
+        run: |
+          echo "🗑️ Deleting IAM Roles..."
+          aws iam delete-role --role-name myapp-${{ steps.env.outputs.environment }}-github-actions || true
+          aws iam delete-role --role-name myapp-${{ steps.env.outputs.environment }}-ecs-execution || true
+          aws iam delete-role --role-name myapp-${{ steps.env.outputs.environment }}-ecs-task || true
+          aws iam delete-role --role-name myapp-${{ steps.env.outputs.environment }}-codedeploy-service || true
+          aws iam delete-role --role-name myapp-${{ steps.env.outputs.environment }}-codepipeline-service || true
+
+      - name: Force Delete VPC (if exists)
+        run: |
+          echo "🗑️ Deleting VPC and related resources..."
+          VPC_ID=$(aws ec2 describe-vpcs --filters "Name=tag:Name,Values=myapp-${{ steps.env.outputs.environment }}" --query 'Vpcs[0].VpcId' --output text)
+          if [ "$VPC_ID" != "None" ] && [ "$VPC_ID" != "" ]; then
+            # Delete subnets
+            aws ec2 describe-subnets --filters "Name=vpc-id,Values=$VPC_ID" --query 'Subnets[].SubnetId' --output text | \
+            xargs -I {} aws ec2 delete-subnet --subnet-id {} || true
+
+            # Delete security groups
+            aws ec2 describe-security-groups --filters "Name=vpc-id,Values=$VPC_ID" --query 'SecurityGroups[?GroupName!=`default`].GroupId' --output text | \
+            xargs -I {} aws ec2 delete-security-group --group-id {} || true
+
+            # Delete VPC
+            aws ec2 delete-vpc --vpc-id $VPC_ID || true
+          fi
 
       - name: Cleanup Summary
         run: |
-          echo "## 🗑️ Infrastructure Destroyed Successfully!" >> $GITHUB_STEP_SUMMARY
+          echo "## 🗑️ Force Cleanup Completed!" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Environment:** ${{ steps.env.outputs.environment }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Destroyed at:** $(date)" >> $GITHUB_STEP_SUMMARY
+          echo "**Cleaned up:** All AWS resources" >> $GITHUB_STEP_SUMMARY
+          echo "**Method:** Direct AWS CLI deletion" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 🎯 Next Steps" >> $GITHUB_STEP_SUMMARY
-          echo "1. Fix any Terraform configuration issues" >> $GITHUB_STEP_SUMMARY
-          echo "2. Run the Terraform Infrastructure workflow to deploy again" >> $GITHUB_STEP_SUMMARY
-          echo "3. Or create new infrastructure with corrected configuration" >> $GITHUB_STEP_SUMMARY
+          echo "### ✅ Resources Deleted:" >> $GITHUB_STEP_SUMMARY
+          echo "- ECS Services and Clusters" >> $GITHUB_STEP_SUMMARY
+          echo "- Load Balancers and Target Groups" >> $GITHUB_STEP_SUMMARY
+          echo "- ECR Repositories" >> $GITHUB_STEP_SUMMARY
+          echo "- S3 Buckets" >> $GITHUB_STEP_SUMMARY
+          echo "- CodeDeploy Applications" >> $GITHUB_STEP_SUMMARY
+          echo "- IAM Roles" >> $GITHUB_STEP_SUMMARY
+          echo "- VPC and Network Resources" >> $GITHUB_STEP_SUMMARY

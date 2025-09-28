@@ -1,20 +1,20 @@
 name: Deploy Application
 
-on:
-  push:
-    branches: [main, staging, develop]
-    paths-ignore:
-      - "terraform/**"
-      - .github/workflows/terraform.yml
-      - README.md
-      - LICENSE
-  pull_request:
-    branches: [main, staging, develop]
-    paths-ignore:
-      - "terraform/**"
-      - .github/workflows/terraform.yml
-      - README.md
-      - LICENSE
+# on:
+#   push:
+#     branches: [main, staging, develop]
+#     paths-ignore:
+#       - "terraform/**"
+#       - .github/workflows/terraform.yml
+#       - README.md
+#       - LICENSE
+#   pull_request:
+#     branches: [main, staging, develop]
+#     paths-ignore:
+#       - "terraform/**"
+#       - .github/workflows/terraform.yml
+#       - README.md
+#       - LICENSE
 
 env:
   AWS_REGION: ap-south-1
