@@ -1,0 +1,76 @@
+name: Destroy Infrastructure
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Environment to destroy
+        required: true
+        default: dev
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+      confirm_destroy:
+        description: 'Type "DESTROY" to confirm'
+        required: true
+        type: string
+
+env:
+  TF_VERSION: 1.6.0
+  AWS_REGION: ap-south-1
+
+jobs:
+  terraform-destroy:
+    name: Destroy Infrastructure
+    runs-on: ubuntu-latest
+    if: github.event.inputs.confirm_destroy == 'DESTROY'
+
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Determine Environment
+        id: env
+        run: |
+          echo "environment=${{ github.event.inputs.environment }}" >> $GITHUB_OUTPUT
+
+      - name: Terraform Init
+        run: |
+          terraform init -backend-config="key=${{ steps.env.outputs.environment }}/terraform.tfstate"
+        working-directory: ./terraform
+
+      - name: Terraform Destroy
+        run: |
+          echo "🚨 DESTROYING INFRASTRUCTURE FOR: ${{ steps.env.outputs.environment }}"
+          echo "⚠️  This will delete ALL resources!"
+          terraform destroy -var-file="environments/${{ steps.env.outputs.environment }}/terraform.tfvars" -auto-approve
+        working-directory: ./terraform
+
+      - name: Cleanup Summary
+        run: |
+          echo "## 🗑️ Infrastructure Destroyed Successfully!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment:** ${{ steps.env.outputs.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Destroyed at:** $(date)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🎯 Next Steps" >> $GITHUB_STEP_SUMMARY
+          echo "1. Fix any Terraform configuration issues" >> $GITHUB_STEP_SUMMARY
+          echo "2. Run the Terraform Infrastructure workflow to deploy again" >> $GITHUB_STEP_SUMMARY
+          echo "3. Or create new infrastructure with corrected configuration" >> $GITHUB_STEP_SUMMARY
