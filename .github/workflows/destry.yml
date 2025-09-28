@@ -1,6 +1,11 @@
 name: Destroy Infrastructure
 
 on:
+  push:
+    branches: [main, staging, develop]
+    paths:
+      - "terraform/**"
+      - .github/workflows/destry.yml
   workflow_dispatch:
     inputs:
       environment:
@@ -25,7 +30,7 @@ jobs:
   terraform-destroy:
     name: Destroy Infrastructure
     runs-on: ubuntu-latest
-    if: github.event.inputs.confirm_destroy == 'DESTROY'
+    if: github.event_name == 'push' || github.event.inputs.confirm_destroy == 'DESTROY'
 
     permissions:
       id-token: write
@@ -49,7 +54,15 @@ jobs:
       - name: Determine Environment
         id: env
         run: |
-          echo "environment=${{ github.event.inputs.environment }}" >> $GITHUB_OUTPUT
+          if [ "${{ github.event.inputs.environment }}" != "" ]; then
+            echo "environment=${{ github.event.inputs.environment }}" >> $GITHUB_OUTPUT
+          elif [ "${{ github.ref }}" == "refs/heads/main" ]; then
+            echo "environment=prod" >> $GITHUB_OUTPUT
+          elif [ "${{ github.ref }}" == "refs/heads/staging" ]; then
+            echo "environment=staging" >> $GITHUB_OUTPUT
+          else
+            echo "environment=dev" >> $GITHUB_OUTPUT
+          fi
 
       - name: Terraform Init
         run: |
